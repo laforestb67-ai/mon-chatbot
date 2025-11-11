@@ -1,0 +1,34 @@
+import express from "express";
+import cors from "cors";
+import OpenAI from "openai";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+app.post("/chat", async (req, res) => {
+  const userMessage = req.body.message || "";
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Tu es un assistant d’éducation financière qui parle français simplement."
+        },
+        { role: "user", content: userMessage }
+      ],
+    });
+
+    const reply = completion.choices[0]?.message?.content || "Je n’ai pas de réponse.";
+    res.json({ reply });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur de communication avec le modèle." });
+  }
+});
+
+app.listen(3000, () => console.log("Serveur prêt sur le port 3000"));
