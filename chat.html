@@ -1,34 +1,230 @@
-import express from "express";
-import cors from "cors";
-import OpenAI from "openai";
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Assistant éducation financière</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat-container {
+      flex: 1;
+      max-width: 480px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #ddd;
+      border-right: 1px solid #ddd;
+      background: #ffffff;
+    }
+    #messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      font-size: 14px;
+    }
+    .msg {
+      margin-bottom: 10px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    .msg.user {
+      text-align: right;
+      color: #0b5ed7;
+    }
+    .msg.bot {
+      text-align: left;
+      color: #333;
+    }
+    #input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid #ddd;
+      background: #fafafa;
+    }
+    #user-input {
+      flex: 1;
+      resize: none;
+      padding: 8px;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      height: 40px;
+      box-sizing: border-box;
+    }
+    button {
+      border: none;
+      padding: 0 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      background: #0b5ed7;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+      min-width: 40px;
+      box-sizing: border-box;
+    }
+    button#mic-btn {
+      background: #6c757d;
+      font-size: 18px;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+  </style>
+</head>
+<body>
+  <div id="chat-container">
+    <div id="messages">
+      <div class="msg bot">
+        Bonjour, je suis votre assistant d’éducation financière. Vous pouvez parler ou écrire votre question.
+      </div>
+    </div>
+    <div id="input-bar">
+      <button id="mic-btn" title="Dicter">🎤</button>
+      <textarea id="user-input" placeholder="Écrivez ou dictez votre question..."></textarea>
+      <button id="send-btn">Envoyer</button>
+    </div>
+  </div>
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const inputEl = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const micBtn  = document.getElementById('mic-btn');
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // TEMPORAIRE: on met une fausse URL tant que le serveur n'est pas prêt.
+    const API_URL = 'https://exemple.com/chat';
 
-app.post("/chat", async (req, res) => {
-  const userMessage = req.body.message || "";
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text) return;
 
-  try {
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: "Tu es un assistant d’éducation financière qui parle français simplement."
-        },
-        { role: "user", content: userMessage }
-      ],
+      appendMessage(text, 'user');
+      inputEl.value = '';
+      setLoading(true);
+
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: text })
+        });
+
+        if (!response.ok) {
+          throw new Error('Erreur API');
+        }
+
+        const data = await response.json();
+        const reply = data.reply || 'Je n’ai pas de réponse disponible pour le moment.';
+        appendMessage(reply, 'bot');
+      } catch (err) {
+        console.error(err);
+        appendMessage("Désolé, un problème technique empêche la réponse.", 'bot');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function appendMessage(text, role) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+
+      if (role === 'bot') {
+        speak(text);
+      }
+    }
+
+    function setLoading(loading) {
+      sendBtn.disabled = loading;
+      inputEl.disabled = loading;
+      micBtn.disabled = loading || !speechRecognitionSupported;
+    }
+
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Envoi par clic
+    sendBtn.addEventListener('click', sendMessage);
+
+    // Envoi par Enter
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     });
 
-    const reply = completion.choices[0]?.message?.content || "Je n’ai pas de réponse.";
-    res.json({ reply });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur de communication avec le modèle." });
-  }
-});
+    // Reconnaissance vocale
+    let speechRecognitionSupported =
+      'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
 
-app.listen(3000, () => console.log("Serveur prêt sur le port 3000"));
+    if (!speechRecognitionSupported) {
+      micBtn.disabled = true;
+      micBtn.title = "Reconnaissance vocale non supportée sur ce navigateur.";
+    } else {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'fr-FR';
+      recognition.interimResults = false;
+
+      let listening = false;
+
+      micBtn.addEventListener('click', () => {
+        if (!listening) {
+          recognition.start();
+        } else {
+          recognition.stop();
+        }
+      });
+
+      recognition.onstart = () => {
+        listening = true;
+        micBtn.textContent = '●';
+        micBtn.style.background = '#dc3545';
+      };
+
+      recognition.onend = () => {
+        listening = false;
+        micBtn.textContent = '🎤';
+        micBtn.style.background = '#6c757d';
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        inputEl.value = transcript;
+        sendMessage();
+      };
+
+      recognition.onerror = () => {
+        listening = false;
+        micBtn.textContent = '🎤';
+        micBtn.style.background = '#6c757d';
+      };
+    }
+  </script>
+</body>
+</html>
+
+
